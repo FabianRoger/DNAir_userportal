@@ -1,0 +1,6 @@
+Required files (all tab-separated .txt unless specified):
+1. otu_table.txt - OTU abundance matrix
+2. metadata.txt - Sample metadata
+3. sequences.fasta - Reference sequences
+4. tax_table.txt - Taxonomic assignments
+5. taxa_metadata.txt - Species metadata

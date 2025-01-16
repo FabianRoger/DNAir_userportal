@@ -1,0 +1,31 @@
+# dependencies
+edna-frontend/node_modules
+edna-frontend/.pnp
+edna-frontend.pnp.js
+
+# testing
+edna-frontend/coverage
+
+# production
+edna-frontend/build
+
+# misc
+edna-frontend/.DS_Store
+edna-frontend/.env.local
+edna-frontend/.env.development.local
+edna-frontend/.env.test.local
+edna-frontend/.env.production.local
+
+edna-frontend/npm-debug.log*
+edna-frontend/yarn-debug.log*
+edna-frontend/yarn-error.log*
+
+#package files
+edna-frontend/package-lock.json
+
+#images
+*.svg
+*.ico
+*.png
+
+.DS_Store
