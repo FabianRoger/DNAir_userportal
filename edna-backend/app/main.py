@@ -147,6 +147,7 @@ async def get_project_data(project_id: int, db: Session = Depends(get_db)):
 @app.post("/projects/{project_id}/upload")
 async def upload_project_data(
     project_id: int,
+    force: bool = False,  # Add force parameter
     otu_table: UploadFile = File(...),
     metadata: UploadFile = File(...),
     sequences: UploadFile = File(...),
@@ -160,6 +161,14 @@ async def upload_project_data(
         project = db.query(models.Project).filter(models.Project.id == project_id).first()
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Check if project has data and force flag is not set
+        has_data = db.query(models.OTU).filter(models.OTU.project_id == project_id).first() is not None
+        if has_data and not force:
+            raise HTTPException(
+                status_code=400, 
+                detail="Project already has data. Use force=true to overwrite."
+            )
         
         # Upload files to storage
         storage_paths = {}
@@ -178,7 +187,7 @@ async def upload_project_data(
         
         # Process the uploaded data
         processor = DataProcessor(db, storage)
-        await processor.process_project_data(project_id, storage_paths)
+        await processor.process_project_data(project_id, storage_paths, force=force)
         
         return {
             "message": "Data uploaded and processed successfully",

@@ -22,6 +22,8 @@ RUN mkdir -p local_storage
 ENV PYTHONPATH=/app
 ENV PORT=8080
 ENV ENVIRONMENT=cloud
+ENV BUCKET_NAME=dnair-data
+ENV GOOGLE_CLOUD_PROJECT=dnair-database
 
 # Initialize database
 RUN python -c "from app.models.models import Base; from app.db.database import engine; Base.metadata.create_all(bind=engine)"

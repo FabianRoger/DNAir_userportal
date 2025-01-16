@@ -1,5 +1,5 @@
 import React from 'react';
-import Dashboard from './components/Dashboard';
+import ProjectSummary from './components/ProjectSummary';
 import CloudTest from './components/CloudTest';
 import './App.css';
 
@@ -7,7 +7,7 @@ function App() {
   return (
     <div className="App">
       <CloudTest />
-      <Dashboard />
+      <ProjectSummary />
     </div>
   );
 }

@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, JSON
+# app/models/models.py
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, JSON, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -40,13 +41,18 @@ class OTU(Base):
     __tablename__ = "otus"
     id = Column(Integer, primary_key=True)
     project_id = Column(Integer, ForeignKey('projects.id'))
-    sequence_id = Column(String, unique=True)
+    sequence_id = Column(String)  # Remove unique=True
     sequence = Column(Text)
     
     project = relationship("Project", back_populates="otus")
     taxonomy = relationship("Taxonomy", back_populates="otu", uselist=False)
     counts = relationship("OTUCount", back_populates="otu")
-    species_info = relationship("SpeciesMetadata", back_populates="otu", uselist=False)  # Changed from metadata
+    species_info = relationship("SpeciesMetadata", back_populates="otu", uselist=False)
+
+    # Make sequence_id unique only within a project
+    __table_args__ = (
+        UniqueConstraint('project_id', 'sequence_id', name='_project_sequence_uc'),
+    )
 
 class OTUCount(Base):
     __tablename__ = "otu_counts"
@@ -82,4 +88,4 @@ class SpeciesMetadata(Base):
     ecological_role = Column(String)
     additional_info = Column(JSON)
     
-    otu = relationship("OTU", back_populates="species_info")  # Changed from metadata
+    otu = relationship("OTU", back_populates="species_info")

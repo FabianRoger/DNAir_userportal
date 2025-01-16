@@ -29,3 +29,12 @@ edna-frontend/package-lock.json
 *.png
 
 .DS_Store
+
+# Ignore virtual environments
+**/myenv/
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
