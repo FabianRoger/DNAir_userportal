@@ -1,40 +1,75 @@
-# dependencies
+# Dependencies
 edna-frontend/node_modules
 edna-frontend/.pnp
 edna-frontend.pnp.js
 
-# testing
+# Testing
 edna-frontend/coverage
+edna-backend/tests/__pycache__/
+*.pyc
 
-# production
+# Production
 edna-frontend/build
 
-# misc
-edna-frontend/.DS_Store
-edna-frontend/.env.local
-edna-frontend/.env.development.local
-edna-frontend/.env.test.local
-edna-frontend/.env.production.local
+# Development
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.log
+edna-frontend/.firebase/
 
-edna-frontend/npm-debug.log*
-edna-frontend/yarn-debug.log*
-edna-frontend/yarn-error.log*
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
 
-#package files
-edna-frontend/package-lock.json
-
-#images
-*.svg
-*.ico
-*.png
-
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
-# Ignore virtual environments
+# Virtual environments
+**/venv/
+**/env/
+**/.venv/
+**/.env/
 **/myenv/
 
-# Ignore Python cache files
+# Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# Database
+*.sqlite3
+*.db
