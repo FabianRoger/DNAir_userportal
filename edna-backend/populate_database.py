@@ -146,6 +146,7 @@ class DatabasePopulator:
                     filename=filename
                 )
 
+            # Add the force parameter to the request
             params = {'force': 'true'} if force else {}
             
             async with self.session.post(
@@ -218,7 +219,7 @@ async def main():
 
             # Upload files
             print("\nUploading project files...")
-            result = await populator.upload_files(project_id)
+            result = await populator.upload_files(project_id, force=args.force)
             if result:
                 print("\nDatabase population completed successfully!")
             else:

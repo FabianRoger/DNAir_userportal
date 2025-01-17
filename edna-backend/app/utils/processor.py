@@ -16,26 +16,54 @@ class DataProcessor:
         logging.basicConfig(level=logging.DEBUG)
 
     async def clean_project_data(self, project_id: int):
-        """Remove existing data for a project."""
+        """Remove all existing data for a project and user."""
         try:
             logging.debug(f"Cleaning existing data for project {project_id}")
             
             # Delete in the correct order to respect foreign key constraints
-            self.db.query(models.SpeciesMetadata).join(models.OTU).filter(
+            
+            # Delete SpeciesMetadata
+            species_metadata_to_delete = self.db.query(models.SpeciesMetadata.id).join(
+                models.OTU
+            ).filter(
                 models.OTU.project_id == project_id
+            ).subquery()
+            self.db.query(models.SpeciesMetadata).filter(
+                models.SpeciesMetadata.id.in_(species_metadata_to_delete)
             ).delete(synchronize_session=False)
+            logging.debug("Deleted species metadata")
             
-            self.db.query(models.OTUCount).join(models.OTU).filter(
+            # Delete OTUCount
+            otu_counts_to_delete = self.db.query(models.OTUCount.id).join(
+                models.OTU
+            ).filter(
                 models.OTU.project_id == project_id
+            ).subquery()
+            self.db.query(models.OTUCount).filter(
+                models.OTUCount.id.in_(otu_counts_to_delete)
             ).delete(synchronize_session=False)
+            logging.debug("Deleted OTU counts")
             
-            self.db.query(models.Taxonomy).join(models.OTU).filter(
+            # Delete Taxonomy
+            taxonomy_to_delete = self.db.query(models.Taxonomy.id).join(
+                models.OTU
+            ).filter(
                 models.OTU.project_id == project_id
+            ).subquery()
+            self.db.query(models.Taxonomy).filter(
+                models.Taxonomy.id.in_(taxonomy_to_delete)
             ).delete(synchronize_session=False)
+            logging.debug("Deleted taxonomy data")
             
-            self.db.query(models.Sample).filter_by(project_id=project_id).delete()
-            self.db.query(models.OTU).filter_by(project_id=project_id).delete()
+            # Delete Samples
+            samples_deleted = self.db.query(models.Sample).filter_by(project_id=project_id).delete()
+            logging.debug(f"Deleted {samples_deleted} samples")
             
+            # Delete OTUs
+            otus_deleted = self.db.query(models.OTU).filter_by(project_id=project_id).delete()
+            logging.debug(f"Deleted {otus_deleted} OTUs")
+            
+            # Commit the changes
             self.db.commit()
             logging.debug("Successfully cleaned existing project data")
             
@@ -62,7 +90,7 @@ class DataProcessor:
                     raise ValueError("Project already has data. Use force=True to overwrite.")
             
             # Read files from Storage
-            logging.debug("Reading files from storage...")
+            logging.debug(f"Reading files from storage paths: {file_paths}")
             
             # Read OTU table
             otu_content = await self.storage.read_file(file_paths['otu_table.txt'])
@@ -109,6 +137,7 @@ class DataProcessor:
 
         except Exception as e:
             logging.error(f"Error processing data: {str(e)}")
+            self.db.rollback()
             raise
 
     async def _process_samples(self, project_id: int, metadata_df: pd.DataFrame):
@@ -128,7 +157,7 @@ class DataProcessor:
                 )
                 self.db.add(sample)
             self.db.commit()
-            logging.debug("Sample processing completed successfully")
+            logging.debug(f"Successfully processed {len(metadata_df)} samples")
         except Exception as e:
             logging.error(f"Error processing samples: {str(e)}")
             self.db.rollback()
@@ -166,7 +195,6 @@ class DataProcessor:
             
             logging.debug(f"Processing taxonomy for {len(tax_df)} entries")
             logging.debug(f"Available OTUs: {list(otus.keys())}")
-            logging.debug(f"Tax table OTUs: {tax_df['OTU'].tolist()}")
             
             for _, row in tax_df.iterrows():
                 otu_id = otus.get(row['OTU'])
@@ -211,12 +239,12 @@ class DataProcessor:
             }
             
             logging.debug(f"Processing OTU counts. Samples: {len(samples)}, OTUs: {len(otus)}")
-            logging.debug(f"OTU table index: {otu_df.index.tolist()}")
             
+            count = 0
             for otu_id in otu_df.index:
                 for sample_name in otu_df.columns:
-                    count = otu_df.loc[otu_id, sample_name]
-                    if count > 0:  # Only store non-zero counts
+                    abundance = otu_df.loc[otu_id, sample_name]
+                    if abundance > 0:  # Only store non-zero counts
                         if otu_id not in otus:
                             logging.warning(f"OTU {otu_id} not found in database")
                             continue
@@ -227,11 +255,18 @@ class DataProcessor:
                         otu_count = models.OTUCount(
                             sample_id=samples[sample_name],
                             otu_id=otus[otu_id],
-                            count=int(count)
+                            count=int(abundance)
                         )
                         self.db.add(otu_count)
+                        count += 1
+                        
+                        if count % 1000 == 0:  # Commit every 1000 records
+                            self.db.commit()
+                            logging.debug(f"Processed {count} OTU counts")
+                            
             self.db.commit()
-            logging.debug("OTU counts processing completed successfully")
+            logging.debug(f"Successfully processed {count} total OTU counts")
+            
         except Exception as e:
             logging.error(f"Error processing OTU counts: {str(e)}")
             self.db.rollback()
@@ -251,10 +286,9 @@ class DataProcessor:
             species_to_otu = {tax.species: otu.id for otu, tax in otu_taxa}
             
             logging.debug(f"Found {len(species_to_otu)} OTU-species mappings")
-            logging.debug(f"Species to OTU mapping: {species_to_otu}")
-            logging.debug(f"Available species in metadata: {metadata_df['Species'].tolist()}")
             
             # Process each species in the metadata
+            count = 0
             for _, row in metadata_df.iterrows():
                 species_name = row['Species']
                 otu_id = species_to_otu.get(species_name)
@@ -273,9 +307,10 @@ class DataProcessor:
                     additional_info={}
                 )
                 self.db.add(metadata)
+                count += 1
                 
             self.db.commit()
-            logging.debug("Successfully processed all species metadata")
+            logging.debug(f"Successfully processed metadata for {count} species")
             
         except Exception as e:
             logging.error(f"Error processing species metadata: {str(e)}")

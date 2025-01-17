@@ -3,7 +3,6 @@ import axios from 'axios';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "./ui/card";
@@ -35,253 +34,244 @@ import {
   Users 
 } from 'lucide-react';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
-const Dashboard = () => {
-  // State management
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [selectedProject, setSelectedProject] = useState(null);
+const ProjectDashboard = () => {
   const [users, setUsers] = useState([]);
+  const [selectedUser, setSelectedUser] = useState('');
   const [projects, setProjects] = useState([]);
+  const [selectedProject, setSelectedProject] = useState('');
+  const [projectData, setProjectData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [projectData, setProjectData] = useState({
-    metrics: {
-      speciesRichness: 0,
-      phylogeneticDiversity: 0,
-      invasiveSpecies: 0,
-      protectedSpecies: 0
-    },
-    recentFindings: [],
-    timeSeriesData: [],
-    locationData: [],
-    otuData: []
-  });
+  const [map, setMap] = useState(null);
 
-  // Fetch users on component mount
   useEffect(() => {
     const fetchUsers = async () => {
       try {
         setLoading(true);
-        const response = await axios.get(`${API_BASE_URL}/users/`);
-        setUsers(response.data);
-        setError(null);
+        const API_URL = process.env.REACT_APP_API_URL;
+        const response = await fetch(`${API_URL}/users/`);
+        const data = await response.json();
+        setUsers(data);
       } catch (err) {
         setError('Failed to fetch users');
-        console.error('Error fetching users:', err);
       } finally {
         setLoading(false);
       }
     };
+
     fetchUsers();
   }, []);
 
-  // Fetch projects when user is selected
   useEffect(() => {
+    if (!selectedUser) return;
+    
     const fetchProjects = async () => {
-      if (!selectedUser) return;
       try {
         setLoading(true);
-        const response = await axios.get(`${API_BASE_URL}/projects/${selectedUser}`);
-        setProjects(response.data);
-        setError(null);
+        const API_URL = process.env.REACT_APP_API_URL;
+        const response = await fetch(`${API_URL}/projects/${selectedUser}`);
+        const data = await response.json();
+        setProjects(data);
       } catch (err) {
         setError('Failed to fetch projects');
-        console.error('Error fetching projects:', err);
       } finally {
         setLoading(false);
       }
     };
+
     fetchProjects();
   }, [selectedUser]);
 
-  // Fetch project data when project is selected
   useEffect(() => {
+    if (!selectedProject) return;
+
     const fetchProjectData = async () => {
-      if (!selectedProject) return;
       try {
         setLoading(true);
-        const response = await axios.get(`${API_BASE_URL}/projects/${selectedProject}/data`);
-        setProjectData(response.data);
-        setError(null);
+        const API_URL = process.env.REACT_APP_API_URL;
+        const response = await fetch(`${API_URL}/projects/${selectedProject}/data`);
+        const data = await response.json();
+        setProjectData(data);
       } catch (err) {
         setError('Failed to fetch project data');
-        console.error('Error fetching project data:', err);
       } finally {
         setLoading(false);
       }
     };
+
     fetchProjectData();
   }, [selectedProject]);
 
-  // Biodiversity metrics chart component
-  const BiodiversityChart = () => (
-    <div className="h-96">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={projectData.timeSeriesData}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="date" />
-          <YAxis />
-          <Tooltip />
-          <Legend />
-          <Line 
-            type="monotone" 
-            dataKey="speciesRichness" 
-            stroke="#8884d8" 
-            name="Species Richness" 
-          />
-          <Line 
-            type="monotone" 
-            dataKey="phylogeneticDiversity" 
-            stroke="#82ca9d" 
-            name="Phylogenetic Diversity" 
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
+  // Initialize map when project data changes
+  useEffect(() => {
+    if (projectData?.locationData?.length > 0) {
+      // Clean up existing map
+      if (map) {
+        map.remove();
+      }
 
-  // Data table component for OTU data
-  const DataTable = () => (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="bg-slate-100">
-            <th className="border p-2 text-left">OTU ID</th>
-            <th className="border p-2 text-left">Species</th>
-            <th className="border p-2 text-left">Abundance</th>
-            <th className="border p-2 text-left">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {projectData.otuData.map((row, index) => (
-            <tr key={index} className="hover:bg-slate-50">
-              <td className="border p-2">{row.otuId}</td>
-              <td className="border p-2">{row.species}</td>
-              <td className="border p-2">{row.abundance}</td>
-              <td className="border p-2">
-                <span className={
-                  row.status === 'invasive' 
-                    ? 'text-amber-500' 
-                    : row.status === 'protected' 
-                      ? 'text-green-500' 
-                      : 'text-slate-500'
-                }>
-                  {row.status}
-                </span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+      const L = window.L;
+      const newMap = L.map('map').setView([
+        projectData.locationData[0].latitude,
+        projectData.locationData[0].longitude
+      ], 13);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(newMap);
+
+      // Add markers for each sampling location
+      projectData.locationData.forEach(location => {
+        L.marker([location.latitude, location.longitude])
+          .bindPopup(`${location.name}<br>Samples: ${location.samples}`)
+          .addTo(newMap);
+      });
+
+      setMap(newMap);
+    }
+
+    return () => {
+      if (map) {
+        map.remove();
+      }
+    };
+  }, [projectData]);
 
   return (
-    <div className="w-full max-w-6xl mx-auto p-4 space-y-4">
+    <div className="w-full max-w-7xl mx-auto p-4 space-y-6">
       {/* User and Project Selection */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Project Selection
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex gap-4">
-          <Select value={selectedUser} onValueChange={setSelectedUser}>
-            <SelectTrigger className="w-64">
-              <SelectValue placeholder="Select User" />
-            </SelectTrigger>
-            <SelectContent>
-              {users.map(user => (
-                <SelectItem key={user.id} value={user.id}>
-                  {user.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select 
-            value={selectedProject} 
-            onValueChange={setSelectedProject}
-            disabled={!selectedUser}
-          >
-            <SelectTrigger className="w-64">
-              <SelectValue placeholder="Select Project" />
-            </SelectTrigger>
-            <SelectContent>
-              {projects.map(project => (
-                <SelectItem key={project.id} value={project.id}>
-                  {project.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
-
-      {error && (
-        <Card className="bg-red-50">
-          <CardContent className="p-4 text-red-500">
-            {error}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Select User
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Select value={selectedUser} onValueChange={setSelectedUser}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a user" />
+              </SelectTrigger>
+              <SelectContent>
+                {users.map(user => (
+                  <SelectItem key={user.id} value={user.id}>
+                    {user.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Select Project</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Select 
+              value={selectedProject} 
+              onValueChange={setSelectedProject}
+              disabled={!selectedUser || projects.length === 0}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder={
+                  !selectedUser 
+                    ? "Select a user first" 
+                    : projects.length === 0 
+                      ? "No projects available" 
+                      : "Select a project"
+                } />
+              </SelectTrigger>
+              <SelectContent>
+                {projects.map(project => (
+                  <SelectItem key={project.id} value={project.id}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </CardContent>
+        </Card>
+      </div>
+
+      {loading && (
+        <div className="flex justify-center p-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+        </div>
       )}
 
-      {loading ? (
-        <Card>
-          <CardContent className="p-4 text-center">
-            Loading...
-          </CardContent>
-        </Card>
-      ) : selectedProject ? (
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
+          {error}
+        </div>
+      )}
+
+      {projectData && (
         <>
           {/* Metrics Overview */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card>
-              <CardHeader className="p-4">
-                <CardTitle className="text-2xl">
+              <CardHeader>
+                <CardTitle className="text-lg">Species</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">
                   {projectData.metrics.speciesRichness}
-                </CardTitle>
-                <CardDescription>Species Detected</CardDescription>
-              </CardHeader>
+                </div>
+                <p className="text-sm text-gray-500">Total species detected</p>
+              </CardContent>
             </Card>
+
             <Card>
-              <CardHeader className="p-4">
-                <CardTitle className="text-2xl">
-                  {projectData.metrics.phylogeneticDiversity}
-                </CardTitle>
-                <CardDescription>Phylogenetic Diversity</CardDescription>
+              <CardHeader>
+                <CardTitle className="text-lg">Sampling Sites</CardTitle>
               </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">
+                  {projectData.locationData?.length || 0}
+                </div>
+                <p className="text-sm text-gray-500">Active sampling sites</p>
+              </CardContent>
             </Card>
+
             <Card>
-              <CardHeader className="p-4">
-                <CardTitle className="text-2xl text-amber-500">
+              <CardHeader>
+                <CardTitle className="text-lg text-orange-600">Invasive Species</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-orange-600">
                   {projectData.metrics.invasiveSpecies}
-                </CardTitle>
-                <CardDescription>Invasive Species</CardDescription>
-              </CardHeader>
+                </div>
+                <p className="text-sm text-gray-500">Species of concern</p>
+              </CardContent>
             </Card>
+
             <Card>
-              <CardHeader className="p-4">
-                <CardTitle className="text-2xl text-green-500">
-                  {projectData.metrics.protectedSpecies}
-                </CardTitle>
-                <CardDescription>Protected Species</CardDescription>
+              <CardHeader>
+                <CardTitle className="text-lg text-green-600">Protected Species</CardTitle>
               </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-green-600">
+                  {projectData.metrics.protectedSpecies}
+                </div>
+                <p className="text-sm text-gray-500">Conservation status</p>
+              </CardContent>
             </Card>
           </div>
 
-          {/* Main Content */}
+          {/* Tabbed Interface */}
           <Tabs defaultValue="overview" className="w-full">
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="data">Raw Data</TabsTrigger>
+              <TabsTrigger value="data">Data</TabsTrigger>
               <TabsTrigger value="analysis">Analysis</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Map */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -290,12 +280,11 @@ const Dashboard = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-64 bg-slate-100 rounded flex items-center justify-center">
-                      Map Visualization
-                    </div>
+                    <div id="map" className="h-96 w-full rounded-lg" />
                   </CardContent>
                 </Card>
 
+                {/* Recent Findings */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -305,12 +294,12 @@ const Dashboard = () => {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {projectData.recentFindings.map((finding, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-2 bg-slate-50 rounded">
+                      {projectData.recentFindings?.map((finding, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded">
                           <div>
                             <span className={`text-sm ${
                               finding.type === 'invasive' 
-                                ? 'text-amber-500' 
+                                ? 'text-orange-500' 
                                 : 'text-green-500'
                             }`}>
                               {finding.type.toUpperCase()}
@@ -326,6 +315,26 @@ const Dashboard = () => {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Sampling Details */}
+              <Card className="mt-4">
+                <CardHeader>
+                  <CardTitle>Sampling Details</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {projectData.locationData?.map((location, index) => (
+                      <div key={index} className="p-4 bg-gray-50 rounded-lg">
+                        <h3 className="font-semibold">{location.name}</h3>
+                        <p className="text-sm text-gray-600">Samples: {location.samples}</p>
+                        <p className="text-sm text-gray-600">
+                          Location: {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
 
             <TabsContent value="data">
@@ -333,7 +342,7 @@ const Dashboard = () => {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Database className="h-5 w-5" />
-                    Raw Data Explorer
+                    Data Explorer
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -342,11 +351,44 @@ const Dashboard = () => {
                       <Search className="h-4 w-4 text-gray-500" />
                       <input
                         type="text"
-                        placeholder="Search sequences, species, or locations..."
+                        placeholder="Search species or locations..."
                         className="w-full p-2 border rounded"
                       />
                     </div>
-                    <DataTable />
+                    {projectData.otuData && (
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse text-sm">
+                          <thead>
+                            <tr className="bg-gray-50">
+                              <th className="border p-2 text-left">Species</th>
+                              <th className="border p-2 text-left">Status</th>
+                              <th className="border p-2 text-left">Abundance</th>
+                              <th className="border p-2 text-left">Location</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {projectData.otuData.map((row, index) => (
+                              <tr key={index} className="hover:bg-gray-50">
+                                <td className="border p-2">{row.species}</td>
+                                <td className="border p-2">
+                                  <span className={
+                                    row.status === 'invasive' 
+                                      ? 'text-orange-500' 
+                                      : row.status === 'protected' 
+                                        ? 'text-green-500' 
+                                        : 'text-gray-500'
+                                  }>
+                                    {row.status}
+                                  </span>
+                                </td>
+                                <td className="border p-2">{row.abundance}</td>
+                                <td className="border p-2">{row.location}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -361,15 +403,37 @@ const Dashboard = () => {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <BiodiversityChart />
+                  <div className="h-96">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={projectData.timeSeriesData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Line 
+                          type="monotone" 
+                          dataKey="speciesCount"
+                          stroke="#8884d8" 
+                          name="Species Count" 
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="diversity" 
+                          stroke="#82ca9d" 
+                          name="Diversity Index" 
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
           </Tabs>
         </>
-      ) : null}
+      )}
     </div>
   );
 };
 
-export default Dashboard;
+export default ProjectDashboard;

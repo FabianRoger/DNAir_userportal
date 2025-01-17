@@ -98,51 +98,177 @@ async def create_project(
 @app.get("/projects/{project_id}/data")
 async def get_project_data(project_id: int, db: Session = Depends(get_db)):
     """Get project data including metrics and findings"""
+    import math
+    from sqlalchemy import func
+    from collections import defaultdict
+    
+    # Verify project exists
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Get OTU data with taxonomy and metadata
-    otus = db.query(models.OTU).filter(models.OTU.project_id == project_id).all()
-    
-    # Calculate metrics
-    species_count = len(otus)
-    invasive_species = db.query(models.SpeciesMetadata).join(models.OTU).filter(
-        models.OTU.project_id == project_id,
-        models.SpeciesMetadata.status == 'invasive'
-    ).count()
-    
-    protected_species = db.query(models.SpeciesMetadata).join(models.OTU).filter(
-        models.OTU.project_id == project_id,
-        models.SpeciesMetadata.iucn_status.in_(['VU', 'EN', 'CR'])
-    ).count()
-    
-    # Get recent findings (invasive or protected species)
-    recent_findings = []
-    for otu in otus:
-        if otu.species_info and (
-            otu.species_info.status == 'invasive' or 
-            otu.species_info.iucn_status in ['VU', 'EN', 'CR']
-        ):
-            finding = {
-                "type": "invasive" if otu.species_info.status == 'invasive' else "protected",
-                "species": otu.taxonomy.species if otu.taxonomy else "Unknown species",
-                "date": project.created_at.strftime("%Y-%m-%d")
-            }
-            recent_findings.append(finding)
-    
-    return {
-        "metrics": {
-            "speciesRichness": species_count,
-            "phylogeneticDiversity": 0,  # Placeholder - implement actual calculation
-            "invasiveSpecies": invasive_species,
-            "protectedSpecies": protected_species
-        },
-        "recentFindings": recent_findings[:5],  # Only return most recent 5 findings
-        "timeSeriesData": [],  # Placeholder for time series data
-        "locationData": [],    # Placeholder for location data
-        "otuData": []         # Placeholder for OTU table data
-    }
+    try:
+        # Get basic OTU data
+        otus = db.query(models.OTU).filter(models.OTU.project_id == project_id).all()
+        
+        # Calculate metrics
+        species_count = len(otus)
+        
+        # Count invasive species
+        invasive_species = db.query(models.SpeciesMetadata).join(models.OTU).filter(
+            models.OTU.project_id == project_id,
+            models.SpeciesMetadata.status == 'invasive'
+        ).count()
+        
+        # Count protected species (VU, EN, CR status)
+        protected_species = db.query(models.SpeciesMetadata).join(models.OTU).filter(
+            models.OTU.project_id == project_id,
+            models.SpeciesMetadata.iucn_status.in_(['VU', 'EN', 'CR'])
+        ).count()
+
+        # Get samples and group by station
+        samples = db.query(models.Sample).filter(
+            models.Sample.project_id == project_id
+        ).all()
+
+        # Group samples by station
+        station_groups = defaultdict(list)
+        for sample in samples:
+            station = sample.environmental_data.get('Station')
+            if station:
+                station_groups[station].append(sample)
+
+        # Process location data by station
+        location_data = []
+        for station, station_samples in station_groups.items():
+            # Use the first sample for lat/long since they're the same for each station
+            first_sample = station_samples[0]
+            
+            # Count total OTUs for this station
+            station_otu_count = db.query(models.OTUCount).filter(
+                models.OTUCount.sample_id.in_([s.id for s in station_samples])
+            ).count()
+            
+            location_data.append({
+                "name": station,
+                "latitude": first_sample.latitude,
+                "longitude": first_sample.longitude,
+                "samples": len(station_samples),  # Number of time points sampled
+                "total_observations": station_otu_count,
+                "first_date": min(s.collection_date for s in station_samples).strftime("%Y-%m-%d"),
+                "last_date": max(s.collection_date for s in station_samples).strftime("%Y-%m-%d")
+            })
+
+        # Get OTU data with taxonomy and abundance
+        otu_data = []
+        for otu in otus:
+            # Calculate total abundance across all samples
+            total_abundance = db.query(func.sum(models.OTUCount.count)).filter(
+                models.OTUCount.otu_id == otu.id
+            ).scalar() or 0
+
+            # Determine status
+            status = "normal"
+            if otu.species_info:
+                if otu.species_info.status == "invasive":
+                    status = "invasive"
+                elif otu.species_info.iucn_status in ["VU", "EN", "CR"]:
+                    status = "protected"
+
+            # Get all sample locations for this OTU
+            sample_locations = db.query(models.Sample.name).join(
+                models.OTUCount
+            ).filter(
+                models.OTUCount.otu_id == otu.id
+            ).distinct().all()
+            
+            otu_data.append({
+                "species": otu.taxonomy.species if otu.taxonomy else "Unknown",
+                "status": status,
+                "abundance": total_abundance,
+                "location": ", ".join(loc[0] for loc in sample_locations)
+            })
+
+        # Generate time series data
+        time_series = defaultdict(lambda: {"speciesCount": 0, "diversity": 0})
+        
+        # Order samples by date
+        samples = db.query(models.Sample).filter(
+            models.Sample.project_id == project_id
+        ).order_by(models.Sample.collection_date).all()
+
+        for sample in samples:
+            date = sample.collection_date.strftime("%Y-%m-%d")
+            
+            # Count unique species in this sample
+            species_in_sample = db.query(models.OTU).join(
+                models.OTUCount
+            ).filter(
+                models.OTUCount.sample_id == sample.id
+            ).distinct().count()
+            
+            time_series[date]["speciesCount"] = species_in_sample
+            
+            # Calculate Shannon diversity index
+            otu_counts = db.query(models.OTUCount).filter(
+                models.OTUCount.sample_id == sample.id
+            ).all()
+            
+            total_counts = sum(count.count for count in otu_counts)
+            if total_counts > 0:
+                proportions = [count.count/total_counts for count in otu_counts]
+                shannon = sum(
+                    -p * math.log(p) for p in proportions if p > 0
+                )
+                time_series[date]["diversity"] = round(shannon, 3)
+
+        time_series_data = [
+            {"date": date, **data}
+            for date, data in sorted(time_series.items())
+        ]
+
+        # Get recent findings (invasive or protected species)
+        recent_findings = []
+        for otu in otus:
+            if otu.species_info and (
+                otu.species_info.status == 'invasive' or 
+                otu.species_info.iucn_status in ['VU', 'EN', 'CR']
+            ):
+                # Get most recent detection
+                latest_detection = db.query(models.Sample.collection_date).join(
+                    models.OTUCount
+                ).filter(
+                    models.OTUCount.otu_id == otu.id
+                ).order_by(
+                    models.Sample.collection_date.desc()
+                ).first()
+
+                if latest_detection:
+                    finding = {
+                        "type": "invasive" if otu.species_info.status == 'invasive' else "protected",
+                        "species": otu.taxonomy.species if otu.taxonomy else "Unknown species",
+                        "date": latest_detection[0].strftime("%Y-%m-%d")
+                    }
+                    recent_findings.append(finding)
+
+        # Sort findings by date (most recent first) and limit to 5
+        recent_findings.sort(key=lambda x: x["date"], reverse=True)
+        recent_findings = recent_findings[:5]
+
+        return {
+            "metrics": {
+                "speciesRichness": species_count,
+                "invasiveSpecies": invasive_species,
+                "protectedSpecies": protected_species
+            },
+            "recentFindings": recent_findings,
+            "timeSeriesData": time_series_data,
+            "locationData": location_data,
+            "otuData": otu_data
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing project data: {str(e)}")
 
 @app.post("/projects/{project_id}/upload")
 async def upload_project_data(
