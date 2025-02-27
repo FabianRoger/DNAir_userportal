@@ -1,35 +1,37 @@
 # Dependencies
-edna-frontend/node_modules
-edna-frontend/.pnp
-edna-frontend.pnp.js
+edna-frontend/node_modules/
+edna-frontend/.pnp/
+edna-frontend/.pnp.js
+package-lock.json
+# package.json  # Uncomment if you really want to ignore it
 
 # Testing
-edna-frontend/coverage
+edna-frontend/coverage/
 edna-backend/tests/__pycache__/
-*.pyc
+**/*.pyc  # Recursive .pyc exclusion
 
 # Production
-edna-frontend/build
+edna-frontend/build/
 
 # Development
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-*.log
+**/.env  # Recursive .env exclusion
+**/.env.local
+**/.env.development.local
+**/.env.test.local
+**/.env.production.local
+**/*.log  # Recursive .log exclusion
 edna-frontend/.firebase/
 
 # IDEs and editors
 .idea/
 .vscode/
-*.swp
-*.swo
+**/*.swp  # Recursive exclusion
+**/*.swo
 
 # OS generated files
 .DS_Store
 .DS_Store?
-._*
+._*/
 .Spotlight-V100
 .Trashes
 ehthumbs.db
@@ -44,9 +46,9 @@ Thumbs.db
 
 # Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
+**/*.py[cod]  # Recursive .pyc, .pyo, .pyd
+**/*.py.class
+**/*.so
 .Python
 build/
 develop-eggs/
@@ -60,16 +62,19 @@ parts/
 sdist/
 var/
 wheels/
-*.egg-info/
+**/*.egg-info/
 .installed.cfg
-*.egg
+**/*.egg
 
 # Temporary files
-*.tmp
-*.temp
-*.swp
-*.swo
+**/*.tmp
+**/*.temp
 
 # Database
-*.sqlite3
-*.db
+**/*.sqlite3
+**/*.db
+
+# Picture Files
+**/*.ico
+**/*.png
+**/*.svg
